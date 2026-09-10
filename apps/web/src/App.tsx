@@ -995,52 +995,52 @@ function RouteMap({
         />
 
         {/* Stations */}
-        {route.map((station, index) => {
-          const point = project(
-            station.lat,
-            station.lon
-          );
+      {route.map((station, index) => {
+  const point = project(station.lat, station.lon);
 
-          const isPassed =
-            index <= activeIndex;
+  const isPassed = index < activeIndex;
 
-          return (
-            <g key={station.code}>
-              <circle
-                className={
-                  isPassed
-                    ? "station passed"
-                    : "station"
-                }
-                cx={point.x}
-                cy={point.y}
-                r="1.6"
-              />
+  const isImportant =
+    index === 0 ||
+    index === route.length - 1 ||
+    index === activeIndex ||
+    index === activeIndex + 1;
 
-              <text
-                x={point.x}
-                y={point.y + 7}
-              >
-                {station.code}
-              </text>
-            </g>
-          );
-        })}
+  return (
+    <g key={station.code}>
+      <circle
+        className={isPassed ? "station passed" : "station"}
+        cx={point.x}
+        cy={point.y}
+        r={isImportant ? "1.8" : "0.8"}
+      />
 
+      {isImportant && (
+        <text
+          x={point.x}
+          y={point.y + 6}
+          className="route-station-label"
+        >
+          {station.code}
+        </text>
+      )}
+    </g>
+  );
+})}
         {/* REAL LIVE TRAIN POSITION */}
         <circle
-          className="train-marker"
-          cx={livePoint.x}
-          cy={livePoint.y}
-          r="2.8"
-        />
+  className="train-marker"
+  cx={livePoint.x}
+  cy={livePoint.y}
+  r="2.2"
+/>
 
-        <circle
-          className="train-ring"
-          cx={livePoint.x}
-          cy={livePoint.y}
-          r="5"
-        />
+<circle
+  className="train-ring"
+  cx={livePoint.x}
+  cy={livePoint.y}
+  r="4"
+/>
       </svg>
 
       <div className="map-legend">
