@@ -139,25 +139,27 @@ const liveRoute =
   train: updatedTrain,
 
   position: {
-    ...snapshot.position,
+  ...snapshot.position,
+  trainNumber: snapshot.train.number,
 
-    trainNumber: snapshot.train.number,
+  lat: latitude,
+  lon: longitude,
+  speed,
+  status,
+  delayMinutes,
 
-    lat: latitude,
-    lon: longitude,
-    speed,
-    status,
-    delayMinutes,
+  lastReportedStation,
+  nextStation,
 
-    lastReportedStation,
-    nextStation,
+  progress: Math.max(0, Math.min(1, progress)),
 
-    progress: Math.max(0, Math.min(1, progress)),
+  isActualPosition:
+    current?.isActualPosition ?? false,
 
-    updatedAt:
-      live.lastUpdatedAt ??
-      new Date().toISOString()
-  },
+  updatedAt:
+    live.lastUpdatedAt ??
+    new Date().toISOString()
+},
 
   prediction: {
     ...snapshot.prediction,
@@ -235,7 +237,7 @@ const enrichWithLiveData = async (
   );
 };
 
-const LIVE_CACHE_MS = 30_000;
+const LIVE_CACHE_MS = 10_000;
 const activateSimulator = () => { if (!simulatorStarted) { startSimulator(wss); simulatorStarted = true; } database = null; dataSource = "simulator"; };
 const readSnapshots = async (): Promise<TrainSnapshot[]> => {
   let snapshots: TrainSnapshot[];

@@ -3,7 +3,7 @@ import { supabase } from "./lib/supabase";
 import { ArrowUpRight, Bell, CalendarDays, Check, ChevronDown, ChevronRight, CircleDot, Clock3, Gauge, LocateFixed, LogOut, MapPin, Moon, Radio, Search, ShieldCheck, Sparkles, Sun, TrainFront, Wifi } from "lucide-react";
 
 type Station = { code: string; name: string; city: string; lat: number; lon: number; sequence: number; scheduledArrival: string; scheduledDeparture: string; platform?: string };
-  type Snapshot = { train: { number: string; name: string; zone: string; route: Station[]; color: string }; position: { lat: number; lon: number; speed: number; status: string; delayMinutes: number; lastReportedStation: string; nextStation: string; progress: number; updatedAt: string }; prediction: { confidence: "high" | "medium" | "low"; confidenceMinutes: number; trend: string; rows: { station: Station; predictedArrival: string; predictedDeparture: string; delayMinutes: number; isPassed: boolean }[]; explanation: string[]; generatedAt: string } };
+type Snapshot = { train: { number: string; name: string; zone: string; route: Station[]; color: string }; position: { lat: number; lon: number; speed: number; status: string; delayMinutes: number; lastReportedStation: string; nextStation: string; progress: number; updatedAt: string;isActualPosition?: boolean; }; prediction: { confidence: "high" | "medium" | "low"; confidenceMinutes: number; trend: string; rows: { station: Station; predictedArrival: string; predictedDeparture: string; delayMinutes: number; isPassed: boolean }[]; explanation: string[]; generatedAt: string } };
 type Location = { state: string; district: string; stations: { code: string; name: string }[] };
 
 const API = "https://sih-2026-eta-production.up.railway.app";
@@ -762,7 +762,63 @@ previousTrains.current = newTrains;
 
   return () => socket.close();
 }, []);
+
   useEffect(() => { if (filteredTrains.length && !filteredTrains.some((item) => item.train.number === selected)) setSelected(filteredTrains[0].train.number); }, [filteredTrains, selected]);
+  useEffect(() => {
+  let cancelled = false;
+
+  const refreshSelectedTrain = async () => {
+    try {
+      const response = await fetch(
+        `${API}/api/trains/${encodeURIComponent(selected)}?t=${Date.now()}`,
+        {
+          cache: "no-store"
+        }
+      );
+
+      if (!response.ok) {
+        throw new Error("Live train refresh failed");
+      }
+
+      const snapshot =
+        (await response.json()) as Snapshot;
+
+      if (cancelled) return;
+
+      setTrains((current) => {
+        const index = current.findIndex(
+          (item) => item.train.number === snapshot.train.number
+        );
+
+        if (index === -1) {
+          return [...current, snapshot];
+        }
+
+        const updated = [...current];
+        updated[index] = snapshot;
+        return updated;
+      });
+
+      setDataError("");
+    } catch (error) {
+      if (!cancelled) {
+        console.warn("Selected train refresh failed:", error);
+      }
+    }
+  };
+
+  refreshSelectedTrain();
+
+  const interval = window.setInterval(
+    refreshSelectedTrain,
+    15_000
+  );
+
+  return () => {
+    cancelled = true;
+    window.clearInterval(interval);
+  };
+}, [selected]);
   if (!selectedTrain) return <div className="boot"><div className="boot-panel"><TrainFront size={28} /><h2>RailPulse is ready</h2><p>{dataError || "Waiting for train telemetry..."}</p><small>Start MySQL with the configured credentials, then refresh this page.</small></div></div>;
   const { train, position, prediction } = selectedTrain;
   const lastUpdated = new Date(position.updatedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" });
@@ -960,10 +1016,55 @@ function RouteMap({
    * This is the actual live latitude/longitude reported
    * by the backend.
    */
-  const livePoint = project(
+  let livePoint = project(
     position.lat,
     position.lon
   );
+
+  const currentIndex = route.findIndex(
+    (station) => station.code === position.nextStation
+  );
+
+  const lastIndex = route.findIndex(
+    (station) => station.name === position.lastReportedStation
+  );
+
+  const fromIndex =
+    lastIndex >= 0
+      ? lastIndex
+      : Math.max(0, currentIndex - 1);
+
+  const toIndex =
+    currentIndex > fromIndex
+      ? currentIndex
+      : Math.min(route.length - 1, fromIndex + 1);
+
+  const canEstimate =
+    position.isActualPosition !== true &&
+    fromIndex >= 0 &&
+    toIndex > fromIndex;
+
+  if (canEstimate) {
+    const from = project(
+      route[fromIndex].lat,
+      route[fromIndex].lon
+    );
+
+    const to = project(
+      route[toIndex].lat,
+      route[toIndex].lon
+    );
+
+    const progress = Math.max(
+      0,
+      Math.min(1, position.progress)
+    );
+
+    livePoint = {
+      x: from.x + (to.x - from.x) * progress,
+      y: from.y + (to.y - from.y) * progress
+    };
+  }
 
   const passedPoints = route
     .slice(0, activeIndex + 1)
