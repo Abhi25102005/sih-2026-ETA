@@ -998,8 +998,6 @@ function RouteMap({
       {route.map((station, index) => {
   const point = project(station.lat, station.lon);
 
-  const isPassed = index < activeIndex;
-
   const isImportant =
     index === 0 ||
     index === route.length - 1 ||
@@ -1008,21 +1006,27 @@ function RouteMap({
 
   return (
     <g key={station.code}>
-      <circle
-        className={isPassed ? "station passed" : "station"}
-        cx={point.x}
-        cy={point.y}
-        r={isImportant ? "1.8" : "0.8"}
-      />
-
       {isImportant && (
-        <text
-          x={point.x}
-          y={point.y + 6}
-          className="route-station-label"
-        >
-          {station.code}
-        </text>
+        <>
+          <circle
+            className={
+              index < activeIndex
+                ? "station passed"
+                : "station"
+            }
+            cx={point.x}
+            cy={point.y}
+            r="1.5"
+          />
+
+          <text
+            x={point.x}
+            y={point.y + 6}
+            className="route-station-label"
+          >
+            {station.code}
+          </text>
+        </>
       )}
     </g>
   );
@@ -1097,6 +1101,12 @@ function PredictionDetails({
   const nextStation = train.route.find(
     (item) => item.code === position.nextStation
   );
+  const delayLabel =
+  position.delayMinutes > 0
+    ? `+${position.delayMinutes} min`
+    : position.delayMinutes < 0
+      ? `${Math.abs(position.delayMinutes)} min early`
+      : "On time";
   const destination = train.route[train.route.length - 1];
   const destinationRow = prediction.rows[prediction.rows.length - 1];
 
@@ -1179,11 +1189,15 @@ function PredictionDetails({
               : "Clear conditions";
 
   const primaryReason =
-    position.speed < 65
-      ? "Reduced speed on the current section"
+  position.status === "halted" && position.speed === 0
+    ? `Station halt at ${position.lastReportedStation}`
+    : position.speed < 50
+      ? `Reduced speed after ${position.lastReportedStation}`
       : position.delayMinutes > 8
-        ? "Previous delay carried forward"
-        : "Minor timetable variation";
+        ? `Existing delay carried forward from ${position.lastReportedStation}`
+        : position.delayMinutes > 0
+          ? "Minor timetable variation"
+          : "Running on schedule";
 
   const nextEta =
     prediction.rows.find(
@@ -1231,7 +1245,7 @@ function PredictionDetails({
         <div className="prediction-summary">
           <div>
             <small>Current delay</small>
-            <strong>+{position.delayMinutes} min</strong>
+            <strong>{delayLabel}</strong>
           </div>
 
           <div>
@@ -1266,6 +1280,12 @@ function PredictionDetails({
             <strong>{prediction.trend}</strong>
           </div>
         </div>
+        <div>
+  <span>Live data</span>
+  <strong>
+    {new Date(position.updatedAt).toLocaleTimeString()}
+  </strong>
+</div>
 
         <div className="prediction-reasons">
           <span className="card-kicker">WHY IS IT LATE?</span>
@@ -1274,12 +1294,16 @@ function PredictionDetails({
             <span>PRIMARY REASON</span>
             <strong>{primaryReason}</strong>
             <p>
-              {position.speed < 65
-                ? `The train is currently moving at ${Math.round(
-                    position.speed
-                  )} km/h, indicating reduced speed on the current section.`
-                : `The train is carrying an existing delay of ${position.delayMinutes} minutes from ${position.lastReportedStation}.`}
-            </p>
+  {position.status === "halted" && position.speed === 0
+    ? `The latest telemetry shows the train halted at ${position.lastReportedStation}.`
+    : position.speed < 50
+      ? `The train is currently moving at ${Math.round(
+          position.speed
+        )} km/h, below the normal operating range for this section.`
+      : position.delayMinutes > 0
+        ? `The train is currently ${position.delayMinutes} minutes behind schedule, with the delay last reported at ${position.lastReportedStation}.`
+        : "No significant live delay is currently reported."}
+</p>
           </div>
 
           {prediction.explanation.map((reason, index) => (
@@ -1334,9 +1358,13 @@ function PredictionDetails({
                 ? "Weather service unavailable; ETA is based on train telemetry and timetable data."
                 : weatherImpact === "Low"
                   ? "No significant weather impact detected on the upcoming section."
-                  : `Weather conditions may require reduced operating speed near ${
-                      nextStation?.name ?? "the next station"
-                    }.`}
+                  : weatherImpact === "Moderate"
+  ? `Moderate weather conditions detected near ${
+      nextStation?.name ?? "the next station"
+    }; operating conditions may affect ETA.`
+  : `Significant weather conditions detected near ${
+      nextStation?.name ?? "the next station"
+    }; the ETA may be affected by reduced operating speed.`}
           </p>
         </div>
 
